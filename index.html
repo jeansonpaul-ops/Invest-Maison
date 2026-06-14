@@ -414,16 +414,23 @@ function parsePrice(p){
 }
 async function autofill(){
   const url=$('f-lien').value.trim();
-  if(!url || !/^https?:\/\//i.test(url) || url===lastFetched) return;
+  if(!url){ return; }
+  if(!/^https?:\/\//i.test(url)){ note('warn','Le lien doit commencer par http:// ou https://'); return; }
+  if(url===lastFetched) return;
   lastFetched=url;
   $('lien-spin').className='lien-spin on';
   note('', 'Récupération des infos…');
+
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), 9000);
   try{
-    const api='https://api.microlink.io/?url='+encodeURIComponent(url)+'&data.price=.price&pdf=false&screenshot=false';
-    const r=await fetch(api);
-    const j=await r.json();
+    const api='https://api.microlink.io/?url='+encodeURIComponent(url)+'&data.price=.price';
+    const r=await fetch(api,{signal:ctrl.signal});
+    clearTimeout(timer);
     $('lien-spin').className='lien-spin';
-    if(j.status!=='success'){ note('err','Impossible de lire cette page. Remplis à la main.'); return; }
+    if(!r.ok){ note('err','Service indisponible (code '+r.status+'). Remplis à la main.'); return; }
+    const j=await r.json();
+    if(j.status!=='success'){ note('err','Page illisible par le service. Remplis à la main.'); return; }
     const d=j.data||{};
     let filled=[];
     if(d.title && !$('f-nom').value.trim()){ $('f-nom').value=d.title.trim(); filled.push('nom'); }
@@ -432,14 +439,19 @@ async function autofill(){
     const price=parsePrice(d.price);
     if(price && !$('f-prix').value){ $('f-prix').value=price; filled.push('prix'); }
     if(filled.length) note('ok','✓ Rempli : '+filled.join(' + ')+(price?'':' — prix à compléter'));
-    else note('warn','Aperçu trouvé, mais ni nom ni prix exploitables.');
+    else if(img) note('warn','Aperçu trouvé, mais nom/prix à saisir à la main.');
+    else note('warn','Rien d\'exploitable sur cette page. Saisie manuelle.');
   }catch(e){
+    clearTimeout(timer);
     $('lien-spin').className='lien-spin';
-    note('err','Échec réseau (quota Microlink ?). Remplis à la main.');
+    if(e.name==='AbortError') note('err','Délai dépassé. Vérifie ta connexion, ou remplis à la main.');
+    else note('err','Échec : '+(e.message||'réseau')+'. (Bloqueur de pub ? Quota ?) Saisie manuelle possible.');
   }
 }
-$('f-lien').addEventListener('paste',()=>setTimeout(autofill,60));
+$('f-lien').addEventListener('paste',()=>setTimeout(autofill,120));
 $('f-lien').addEventListener('blur',autofill);
+let lienTimer=null;
+$('f-lien').addEventListener('input',()=>{ clearTimeout(lienTimer); lienTimer=setTimeout(autofill,900); });
 $('f-lien').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); autofill(); } });
 
 $('fab').onclick=openSheet;
