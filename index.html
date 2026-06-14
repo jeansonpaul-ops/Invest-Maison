@@ -164,6 +164,20 @@
 </head>
 <body>
 
+<div id="gate" style="position:fixed;inset:0;z-index:200;background:linear-gradient(160deg,#003366,#0066CC);display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;color:#fff;">
+  <div style="width:64px;height:64px;border-radius:20px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;margin-bottom:22px;">
+    <svg viewBox="0 0 24 24" style="width:34px;height:34px;stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;"><path d="M3 11l9-8 9 8M5 9.5V21h14V9.5"/></svg>
+  </div>
+  <h1 style="font-size:24px;font-weight:700;margin-bottom:8px;">Invest Maison</h1>
+  <p style="font-size:14px;color:#cfe0f2;margin-bottom:28px;max-width:280px;line-height:1.5;">Liste partagée des investissements pour Bettembourg.</p>
+  <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:12px;">
+    <input id="login-email" type="email" inputmode="email" autocomplete="username" placeholder="Email" style="width:100%;font-size:16px;background:rgba(255,255,255,.95);border:none;border-radius:12px;padding:14px;color:#1a1a1a;outline:none;">
+    <input id="login-pass" type="password" autocomplete="current-password" placeholder="Mot de passe" style="width:100%;font-size:16px;background:rgba(255,255,255,.95);border:none;border-radius:12px;padding:14px;color:#1a1a1a;outline:none;">
+    <button id="login-btn" style="background:#fff;color:#003366;border:none;border-radius:12px;padding:14px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px;">Se connecter</button>
+  </div>
+  <div id="gate-err" style="margin-top:18px;font-size:13px;color:#ffd0d0;display:none;max-width:300px;line-height:1.4;"></div>
+</div>
+
 <header>
   <div class="logo"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 9.5V21h14V9.5"/></svg></div>
   <div>
@@ -171,6 +185,9 @@
     <div class="sub">Équipement Bettembourg</div>
   </div>
   <div class="sync" id="sync"><span class="dot"></span><span id="sync-txt">…</span></div>
+  <div id="logout" title="Se déconnecter" style="margin-left:10px;width:34px;height:34px;border-radius:9px;background:var(--surface2);border:1px solid var(--border);display:none;align-items:center;justify-content:center;cursor:pointer;color:var(--txt2);flex-shrink:0;">
+    <svg class="ico ico-sm" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+  </div>
 </header>
 
 <div class="wrap">
@@ -253,6 +270,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 /* ====================================================================
    CONFIG FIREBASE - REMPLACE CE BLOC PAR TA PROPRE CONFIG
@@ -292,6 +310,8 @@ const LINK='<svg class="ico ico-sm" style="display:inline;vertical-align:-2px" v
 const FOLDER='<svg class="ico ico-sm" viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3z"/></svg>';
 const BOX='<svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></svg>';
 
+let auth=null, started=false;
+
 function init(){
   if(!CONFIGURED){
     $('warn').style.display='flex';
@@ -300,10 +320,49 @@ function init(){
   }
   firebase.initializeApp(firebaseConfig);
   db=firebase.firestore();
+  auth=firebase.auth();
+  auth.onAuthStateChanged(user=>{
+    if(user){
+      $('gate').style.display='none';
+      $('logout').style.display='flex';
+      if(!started){ started=true; startData(); }
+    } else {
+      $('gate').style.display='flex';
+      $('logout').style.display='none';
+      setSync(false,'Déconnecté');
+    }
+  });
+}
+
+function startData(){
   db.collection('invest').orderBy('created','asc').onSnapshot(s=>{
     items=s.docs.map(d=>({id:d.id,...d.data()})); setSync(true,'Synchronise'); render();
   }, e=>setSync(false,'Erreur'));
 }
+
+function doLogin(){
+  $('gate-err').style.display='none';
+  const email=$('login-email').value.trim();
+  const pass=$('login-pass').value;
+  if(!email||!pass){ showGateErr('Entre ton email et ton mot de passe.'); return; }
+  $('login-btn').disabled=true; $('login-btn').style.opacity='.6'; $('login-btn').textContent='Connexion…';
+  auth.signInWithEmailAndPassword(email,pass)
+    .catch(e=>{
+      let msg;
+      switch(e.code){
+        case 'auth/invalid-email': msg='Email invalide.'; break;
+        case 'auth/user-not-found': case 'auth/invalid-credential': case 'auth/wrong-password':
+          msg='Email ou mot de passe incorrect.'; break;
+        case 'auth/too-many-requests': msg='Trop de tentatives. Réessaie plus tard.'; break;
+        case 'auth/network-request-failed': msg='Pas de connexion réseau.'; break;
+        default: msg='Échec : '+(e.code||e.message);
+      }
+      showGateErr(msg);
+    })
+    .finally(()=>{ $('login-btn').disabled=false; $('login-btn').style.opacity='1'; $('login-btn').textContent='Se connecter'; });
+}
+function showGateErr(t){ $('gate-err').style.display='block'; $('gate-err').textContent=t; }
+function doLogout(){ if(auth) auth.signOut(); }
 function setSync(ok,t){ $('sync').className='sync'+(ok?' ok':''); $('sync-txt').textContent=t; }
 
 async function add(){
@@ -500,6 +559,9 @@ $('f-nom').addEventListener('keydown',e=>{if(e.key==='Enter')$('f-prix').focus()
 $('prio-pick').querySelectorAll('button').forEach(b=>b.onclick=()=>setPrio(b.dataset.p));
 $('f-cat').addEventListener('input',()=>{ if($('f-cat').value.trim()){ curCat=''; $('cat-chips').querySelectorAll('.chip').forEach(c=>c.classList.remove('on')); } });
 $('btn-export').onclick=exportCsv;
+document.getElementById('login-btn').onclick=doLogin;
+document.getElementById('login-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+document.getElementById('logout').onclick=doLogout;
 $('seg-sort').querySelectorAll('button').forEach(b=>b.onclick=()=>{
   $('seg-sort').querySelectorAll('button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); sortMode=b.dataset.s; render();
