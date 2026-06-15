@@ -42,6 +42,10 @@
     font-size:13px; line-height:1.5; margin-bottom:16px; display:flex; gap:10px;}
   .warn code{background:#000; padding:1px 6px; border-radius:5px; font-size:12px; color:#fff;}
 
+  .banner{display:none; align-items:center; gap:11px; background:var(--pt-bg); border:1px solid var(--pt);
+    color:var(--pt); padding:12px 15px; border-radius:var(--r); font-size:13.5px; font-weight:600; margin-bottom:14px; line-height:1.4;}
+  .banner.show{display:flex;}
+
   .hero{background:linear-gradient(135deg,#003366,#0066CC); border:none; color:#fff;
     border-radius:var(--r); padding:18px 20px; margin-bottom:14px;}
   .hero .label{font-size:12px; color:#bcd6f2; display:flex; align-items:center; gap:6px;}
@@ -87,7 +91,7 @@
   .chk svg{width:14px; height:14px; stroke:#fff; stroke-width:3; opacity:0; transition:.15s;}
   .chk.on{background:var(--green); border-color:var(--green);}
   .chk.on svg{opacity:1;}
-  .item .main{flex:1; min-width:0;}
+  .item .main{flex:1; min-width:0; cursor:pointer;}
   .item .nm{font-weight:600; font-size:14.5px; display:flex; align-items:center; gap:6px; word-break:break-word;}
   .item.done .nm{text-decoration:line-through;}
   .item .nm a{color:var(--accent2); text-decoration:none;}
@@ -192,6 +196,11 @@
 
 <div class="wrap">
   <div id="warn" class="warn" style="display:none;"></div>
+  <div id="banner" class="banner">
+    <svg class="ico ico-sm" viewBox="0 0 24 24" style="flex-shrink:0"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+    <span id="banner-txt" style="flex:1"></span>
+    <button id="banner-x" aria-label="Fermer" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;width:24px;flex-shrink:0;"><svg class="ico ico-sm" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
 
   <div class="hero">
     <div class="label"><svg class="ico ico-sm" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Total à investir</div>
@@ -228,7 +237,7 @@
 <div class="overlay" id="overlay"></div>
 <div class="sheet" id="sheet">
   <div class="grab"></div>
-  <h2>Nouvel équipement</h2>
+  <h2 id="sheet-title">Nouvel équipement</h2>
   <div class="field">
     <label><svg class="ico ico-sm" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>Nom</label>
     <input id="f-nom" type="text" placeholder="Ex. Robot tondeuse Mova Viax 500">
@@ -265,7 +274,7 @@
     <div class="chips" id="cat-chips"></div>
     <input id="f-cat" type="text" placeholder="+ Nouvelle catégorie…" style="margin-top:8px;">
   </div>
-  <button class="submit" id="submit"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Ajouter à la liste</button>
+  <button class="submit" id="submit"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span id="submit-txt">Ajouter à la liste</span></button>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -295,7 +304,7 @@ const fmt = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
 const $ = id => document.getElementById(id);
 const esc = s => (s+'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let items=[], db=null, sortMode='prio', curPrio='important', curImg='', curCat='', openAcc=new Set(['urgent','important','plustard']);
+let items=[], db=null, sortMode='prio', curPrio='important', curImg='', curCat='', editId=null, openAcc=new Set(['urgent','important','plustard']);
 const DEFAULT_CATS=['Jardin','Réseau','Énergie','Cuisine','Salon','Chambre','Salle de bain','Terrasse','Sécurité','Bricolage','Électroménager','Divers'];
 const CAT_PALETTE=['#0a9d6f','#0066CC','#b87514','#7c3aed','#d92d2d','#0891b2','#c2410c','#be185d','#4d7c0f','#1565c0','#9333ea','#64748b'];
 const catColor=(()=>{ const map={};
@@ -308,6 +317,7 @@ const CHECK='<svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
 const TRASH='<svg class="ico ico-sm" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>';
 const LINK='<svg class="ico ico-sm" style="display:inline;vertical-align:-2px" viewBox="0 0 24 24"><path d="M14 3h7v7M10 14 21 3M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>';
 const FOLDER='<svg class="ico ico-sm" viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3z"/></svg>';
+const PENCIL='<svg style="display:inline;width:13px;height:13px;vertical-align:-1px;stroke:var(--txt3);stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;opacity:.7" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const BOX='<svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></svg>';
 
 let auth=null, started=false;
@@ -334,11 +344,36 @@ function init(){
   });
 }
 
+let firstLoad=true;
 function startData(){
   db.collection('invest').orderBy('created','asc').onSnapshot(s=>{
     items=s.docs.map(d=>({id:d.id,...d.data()})); setSync(true,'Synchronise'); render();
+    if(firstLoad){ firstLoad=false; checkBanner(); }
   }, e=>setSync(false,'Erreur'));
 }
+
+const VISIT_KEY='invest_last_visit';
+const myEmail=()=> (auth&&auth.currentUser&&auth.currentUser.email)||'';
+function checkBanner(){
+  let last=0;
+  try{ last=parseInt(localStorage.getItem(VISIT_KEY))||0; }catch(e){}
+  if(last>0){
+    const me=myEmail();
+    // articles créés depuis la dernière visite, pas par moi
+    const fresh=items.filter(i=>i.created>last && i.by && i.by!==me);
+    if(fresh.length>0){
+      const names=fresh.slice(0,3).map(i=>i.nom).join(', ');
+      const extra=fresh.length>3?' +'+(fresh.length-3)+' autre(s)':'';
+      showBanner(fresh.length+(fresh.length>1?' nouveaux articles':' nouvel article')+' depuis ta dernière visite : '+names+extra);
+    }
+  }
+  try{ localStorage.setItem(VISIT_KEY, Date.now()); }catch(e){}
+}
+function showBanner(txt){
+  const b=$('banner'); if(!b) return;
+  $('banner-txt').textContent=txt; b.className='banner show';
+}
+function hideBanner(){ const b=$('banner'); if(b) b.className='banner'; }
 
 function doLogin(){
   $('gate-err').style.display='none';
@@ -367,13 +402,14 @@ function setSync(ok,t){ $('sync').className='sync'+(ok?' ok':''); $('sync-txt').
 
 async function add(){
   const nom=$('f-nom').value.trim(); if(!nom){$('f-nom').focus(); note('warn','Le nom est obligatoire.'); return;}
-  const o={nom, lien:$('f-lien').value.trim(), prix:parseFloat($('f-prix').value)||0,
+  const data={nom, lien:$('f-lien').value.trim(), prix:parseFloat($('f-prix').value)||0,
     qte:Math.max(1,parseInt($('f-qte').value)||1), prio:curPrio,
-    cat:(curCat||$('f-cat').value.trim()||'Divers'), img:curImg||'', done:false, created:Date.now()};
+    cat:(curCat||$('f-cat').value.trim()||'Divers'), img:curImg||''};
   if(db){
     $('submit').disabled=true; $('submit').style.opacity='.6';
     try{
-      await db.collection('invest').add(o);
+      if(editId){ await db.collection('invest').doc(editId).update(data); }
+      else { await db.collection('invest').add({...data, done:false, created:Date.now(), by:myEmail()}); }
       closeSheet();
     }catch(e){
       note('err','Échec de l\'enregistrement : '+(e.code||e.message||'inconnu')+'. Vérifie les règles Firestore.');
@@ -381,8 +417,27 @@ async function add(){
       $('submit').disabled=false; $('submit').style.opacity='1';
     }
   } else {
-    items.push({id:'l'+Date.now(),...o}); render(); closeSheet();
+    if(editId){ const it=items.find(i=>i.id===editId); if(it) Object.assign(it,data); }
+    else { items.push({id:'l'+Date.now(),...data,done:false,created:Date.now()}); }
+    render(); closeSheet();
   }
+}
+
+function openEdit(id){
+  const it=items.find(i=>i.id===id); if(!it) return;
+  editId=id;
+  $('sheet-title').textContent='Modifier l\'équipement';
+  $('submit-txt').textContent='Enregistrer les modifications';
+  $('f-nom').value=it.nom||'';
+  $('f-lien').value=it.lien||'';
+  $('f-prix').value=it.prix||'';
+  $('f-qte').value=it.qte||1;
+  setPrio(it.prio||'important');
+  curCat=it.cat||''; $('f-cat').value='';
+  curImg=it.img||'';
+  if(curImg){ $('pv-img').src=curImg; $('pv-t').textContent=it.nom||''; $('preview').className='preview on'; }
+  lastFetched=it.lien||''; // évite un refetch auto au focus
+  $('overlay').classList.add('show'); $('sheet').classList.add('show'); renderChips();
 }
 async function del(id){ if(db) await db.collection('invest').doc(id).delete(); else {items=items.filter(i=>i.id!==id);render();} }
 async function toggle(id){ const it=items.find(i=>i.id===id); if(!it)return;
@@ -445,11 +500,11 @@ function renderFlat(){
 }
 
 function itemRow(it,hideCat){
-  const thumb = it.img ? '<img class="item-thumb" src="'+esc(it.img)+'" alt="" onerror="this.style.display=\'none\'">' : '';
+  const thumb = it.img ? '<img class="item-thumb" src="'+esc(it.img)+'" alt="" onerror="this.style.display=\'none\'" data-edit="'+it.id+'">' : '';
   return '<div class="item '+(it.done?'done':'')+'">'
     +'<div class="chk '+(it.done?'on':'')+'" data-tog="'+it.id+'">'+CHECK+'</div>'
     +thumb
-    +'<div class="main"><div class="nm">'+(it.lien?'<a href="'+esc(it.lien)+'" target="_blank" rel="noopener">'+esc(it.nom)+' '+LINK+'</a>':esc(it.nom))+'</div>'
+    +'<div class="main" data-edit="'+it.id+'"><div class="nm">'+(it.lien?'<a href="'+esc(it.lien)+'" target="_blank" rel="noopener" data-stop="1">'+esc(it.nom)+' '+LINK+'</a>':esc(it.nom))+' '+PENCIL+'</div>'
     +'<div class="meta"><span>'+fmt.format(it.prix)+' / u.</span>'
     +((sortMode==='cat'||hideCat)?'':'<span class="ct" style="color:'+catColor(it.cat)+'"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+catColor(it.cat)+';margin-right:4px"></span>'+esc(it.cat)+'</span>')+'</div></div>'
     +'<div class="qte-box"><button data-minus="'+it.id+'">−</button><span>'+it.qte+'</span><button data-plus="'+it.id+'">+</button></div>'
@@ -466,6 +521,10 @@ function bind(){
   $('liste').querySelectorAll('[data-tog]').forEach(e=>e.onclick=()=>toggle(e.dataset.tog));
   $('liste').querySelectorAll('[data-plus]').forEach(e=>e.onclick=()=>chgQte(e.dataset.plus,1));
   $('liste').querySelectorAll('[data-minus]').forEach(e=>e.onclick=()=>chgQte(e.dataset.minus,-1));
+  $('liste').querySelectorAll('[data-edit]').forEach(e=>e.onclick=ev=>{
+    if(ev.target.closest('[data-stop]')) return; // ne pas éditer si on tape le lien
+    openEdit(e.dataset.edit);
+  });
 }
 
 function exportCsv(){
@@ -492,10 +551,11 @@ function renderChips(){
 }
 function setCat(c){ curCat=c; $('f-cat').value=''; renderChips(); }
 
-function openSheet(){ $('overlay').classList.add('show'); $('sheet').classList.add('show'); renderChips(); setTimeout(()=>$('f-nom').focus(),300); }
+function openSheet(){ editId=null; $('sheet-title').textContent='Nouvel équipement'; $('submit-txt').textContent='Ajouter à la liste';
+  $('overlay').classList.add('show'); $('sheet').classList.add('show'); renderChips(); setTimeout(()=>$('f-nom').focus(),300); }
 function closeSheet(){ $('overlay').classList.remove('show'); $('sheet').classList.remove('show');
   ['f-nom','f-lien','f-prix','f-cat'].forEach(i=>$(i).value=''); $('f-qte').value='1'; setPrio('important');
-  curImg=''; curCat=''; $('preview').className='preview'; $('fetch-note').className='fetch-note'; $('lien-spin').className='lien-spin'; renderChips(); }
+  curImg=''; curCat=''; editId=null; lastFetched=''; $('preview').className='preview'; $('fetch-note').className='fetch-note'; $('lien-spin').className='lien-spin'; renderChips(); }
 function setPrio(p){ curPrio=p; $('prio-pick').querySelectorAll('button').forEach(b=>b.removeAttribute('data-on'));
   $('prio-pick').querySelector('[data-p="'+p+'"]').setAttribute('data-on',p); }
 
@@ -562,6 +622,7 @@ $('btn-export').onclick=exportCsv;
 document.getElementById('login-btn').onclick=doLogin;
 document.getElementById('login-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
 document.getElementById('logout').onclick=doLogout;
+document.getElementById('banner-x').onclick=hideBanner;
 $('seg-sort').querySelectorAll('button').forEach(b=>b.onclick=()=>{
   $('seg-sort').querySelectorAll('button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); sortMode=b.dataset.s; render();
